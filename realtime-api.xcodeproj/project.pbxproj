@@ -6,13 +6,30 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		415B87A02EF3752800818FEF /* RealtimeAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 415B879F2EF3752800818FEF /* RealtimeAPI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		415B87752EF3629500818FEF /* realtime-api.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "realtime-api.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		415B879D2EF3747500818FEF /* Exceptions for "realtime-api" folder in "realtime-api" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 415B87742EF3629500818FEF /* realtime-api */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		415B87772EF3629500818FEF /* realtime-api */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				415B879D2EF3747500818FEF /* Exceptions for "realtime-api" folder in "realtime-api" target */,
+			);
 			path = "realtime-api";
 			sourceTree = "<group>";
 		};
@@ -23,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				415B87A02EF3752800818FEF /* RealtimeAPI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +83,7 @@
 			);
 			name = "realtime-api";
 			packageProductDependencies = (
+				415B879F2EF3752800818FEF /* RealtimeAPI */,
 			);
 			productName = "realtime-api";
 			productReference = 415B87752EF3629500818FEF /* realtime-api.app */;
@@ -94,6 +113,9 @@
 			);
 			mainGroup = 415B876C2EF3629500818FEF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				415B879E2EF3752800818FEF /* XCLocalSwiftPackageReference "backend/swift-realtime-openai" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 415B87762EF3629500818FEF /* Products */;
 			projectDirPath = "";
@@ -256,6 +278,8 @@
 				DEVELOPMENT_TEAM = Y5UE64R7TQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "realtime-api/Info.plist";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Microphone access is required for voice conversations with AI";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -288,6 +312,8 @@
 				DEVELOPMENT_TEAM = Y5UE64R7TQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "realtime-api/Info.plist";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Microphone access is required for voice conversations with AI";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -332,6 +358,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		415B879E2EF3752800818FEF /* XCLocalSwiftPackageReference "backend/swift-realtime-openai" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "backend/swift-realtime-openai";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		415B879F2EF3752800818FEF /* RealtimeAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RealtimeAPI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 415B876D2EF3629500818FEF /* Project object */;
 }

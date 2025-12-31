@@ -1,0 +1,58 @@
+.env
+.venv
+.DS_Store
+.idea
+.vscode
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+
+/backend/swift-realtime-openai/.build
+# Xcode
+build/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+# CocoaPods
+Pods/
+Podfile.lock
+# Swift Package Manager
+build/
+Packages/
+Package.pins
+Package.resolved
+# Carthage
+Carthage/Build/
+Carthage/Checkouts/
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+# Miscellaneous
+*.xcworkspace
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+# macOS specific files
+DS_Store
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+# Code Injection (Xcode plugin)
+iOSInjectionProject/

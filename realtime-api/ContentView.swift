@@ -10,52 +10,82 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @Query(sort: \Conversation.timestamp, order: .reverse) private var conversations: [Conversation]
 
     var body: some View {
-        NavigationSplitView {
+        NavigationStack {
             List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
+                ForEach(conversations) { conversation in
+                    NavigationLink(destination: ConversationDetailView(conversation: conversation)) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(conversation.title)
+                                .font(.headline)
+                                .lineLimit(1)
+
+                            HStack {
+                                Text(conversation.timestamp, style: .date)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                Text("•")
+                                    .foregroundColor(.secondary)
+
+                                Text(formatDuration(conversation.duration))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                Text("•")
+                                    .foregroundColor(.secondary)
+
+                                Text("\(conversation.messages.count) messages")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
                 }
-                .onDelete(perform: deleteItems)
+                .onDelete(perform: deleteConversations)
             }
+            .navigationTitle("Conversations")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     EditButton()
                 }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink(destination: ConversationView(modelContext: modelContext)) {
+                        Label("New Conversation", systemImage: "plus.circle.fill")
                     }
                 }
             }
-        } detail: {
-            Text("Select an item")
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+            .overlay {
+                if conversations.isEmpty {
+                    ContentUnavailableView(
+                        "No Conversations",
+                        systemImage: "bubble.left.and.bubble.right",
+                        description: Text("Start a new conversation to begin")
+                    )
+                }
             }
         }
+    }
+
+    private func deleteConversations(offsets: IndexSet) {
+        withAnimation {
+            for index in offsets {
+                modelContext.delete(conversations[index])
+            }
+        }
+    }
+
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+        .modelContainer(for: [Conversation.self, ConversationMessage.self], inMemory: true)
 }
