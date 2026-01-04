@@ -18,64 +18,141 @@ struct ConversationView: View {
     }
 
     var body: some View {
-        VStack(spacing: 30) {
-            Spacer()
-
-            // Microphone Icon
-            Image(systemName: viewModel.isTalking ? "mic.fill" : "mic")
-                .font(.system(size: 100))
-                .foregroundColor(connectionColor)
-                .symbolEffect(.bounce, value: viewModel.isTalking)
-
-            // Status Text
-            VStack(spacing: 8) {
-                Text(statusText)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                if viewModel.isTalking {
-                    Text("Listening...")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+        VStack(spacing: 0) {
+            // Top Section: Scrollable Chat Messages
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(viewModel.displayMessages) { message in
+                            MessageBubble(message: ConversationMessage(
+                                id: UUID(uuidString: message.id) ?? UUID(),
+                                role: message.role,
+                                content: message.content,
+                                timestamp: message.timestamp
+                            ))
+                            .id(message.id)
+                        }
+                    }
+                    .padding()
+                    .onChange(of: viewModel.displayMessages.count) { _, _ in
+                        // Auto-scroll to latest message
+                        if let lastMessage = viewModel.displayMessages.last {
+                            withAnimation {
+                                proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                            }
+                        }
+                    }
                 }
+                .frame(maxHeight: .infinity)
             }
 
-            Spacer()
+            Divider()
 
-            // Push-to-Talk Button
+            // Middle Section: Microphone Icon + Status
+            VStack(spacing: 16) {
+                Image(systemName: viewModel.isAudioMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(connectionColor)
+                    .symbolEffect(.bounce, value: !viewModel.isAudioMuted)
+
+                VStack(spacing: 8) {
+                    Text(statusText)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+
+                    if case .connected = viewModel.connectionState {
+                        Text(modeText)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(.vertical, 20)
+
+            // Bottom Section: Controls
             if case .connected = viewModel.connectionState {
-                Button(action: {
-                    viewModel.toggleTalking()
-                }) {
-                    Text(viewModel.isTalking ? "Stop Talking" : "Press to Talk")
+                VStack(spacing: 12) {
+                    // Mode Toggle
+                    Picker("Conversation Mode", selection: $viewModel.conversationMode) {
+                        Text("Live Session").tag(ConversationMode.liveSession)
+                        Text("Push-to-Talk").tag(ConversationMode.pushToTalk)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+
+                    // PTT Button (changes based on mode)
+                    if case .pushToTalk = viewModel.conversationMode {
+                        // Hold-to-talk button
+                        Text("Hold to Talk")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(viewModel.isAudioMuted ? Color.gray : Color.blue)
+                            .cornerRadius(12)
+                            .overlay(
+                                HStack {
+                                    Image(systemName: "mic.circle.fill")
+                                        .font(.title3)
+                                    Spacer()
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 20)
+                            )
+                            .padding(.horizontal)
+                            .simultaneousGesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { _ in
+                                        if viewModel.isAudioMuted {
+                                            viewModel.isAudioMuted = false
+                                        }
+                                    }
+                                    .onEnded { _ in
+                                        if !viewModel.isAudioMuted {
+                                            viewModel.isAudioMuted = true
+                                        }
+                                    }
+                            )
+                    } else {
+                        // Live mode indicator
+                        HStack {
+                            Image(systemName: "mic.circle.fill")
+                                .font(.title3)
+                            Text("Microphone Active")
+                            Spacer()
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 8, height: 8)
+                        }
+                        .font(.headline)
+                        .foregroundColor(.green)
+                        .padding()
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
+                    }
+
+                    // End Conversation Button
+                    Button(action: {
+                        viewModel.endConversation()
+                        dismiss()
+                    }) {
+                        HStack {
+                            Image(systemName: "phone.down.circle.fill")
+                                .font(.title3)
+                            Text("End Conversation")
+                        }
                         .font(.headline)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(viewModel.isTalking ? Color.red : Color.blue)
+                        .background(Color.red)
                         .cornerRadius(12)
+                    }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
+                .padding(.bottom, 20)
             }
-
-            // End Conversation Button
-            if case .connected = viewModel.connectionState {
-                Button(action: {
-                    viewModel.endConversation()
-                    dismiss()
-                }) {
-                    Text("End Conversation")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(12)
-                }
-                .padding(.horizontal)
-            }
-
-            Spacer()
         }
         .navigationTitle("Conversation")
         .navigationBarTitleDisplayMode(.inline)
@@ -115,6 +192,15 @@ struct ConversationView: View {
         }
     }
 
+    private var modeText: String {
+        switch viewModel.conversationMode {
+        case .liveSession:
+            return "Continuous Listening"
+        case .pushToTalk:
+            return "Hold button to speak"
+        }
+    }
+
     private var connectionColor: Color {
         switch viewModel.connectionState {
         case .disconnected:
@@ -122,7 +208,7 @@ struct ConversationView: View {
         case .connecting:
             return .orange
         case .connected:
-            return viewModel.isTalking ? .red : .green
+            return viewModel.isAudioMuted ? .gray : .green
         case .error:
             return .red
         }
