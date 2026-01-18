@@ -56,3 +56,6 @@ timeline.xctimeline
 playground.xcworkspace
 # Code Injection (Xcode plugin)
 iOSInjectionProject/
+
+.github
+.specify
