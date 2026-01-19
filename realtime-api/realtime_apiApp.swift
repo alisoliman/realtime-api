@@ -2,8 +2,6 @@
 //  realtime_apiApp.swift
 //  realtime-api
 //
-//  Created by Ali S on 17/12/2025.
-//
 
 import SwiftUI
 import SwiftData
@@ -12,7 +10,8 @@ import SwiftData
 struct realtime_apiApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            Conversation.self,
+            ConversationMessage.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
