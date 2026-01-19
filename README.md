@@ -58,35 +58,48 @@ For detailed setup instructions, see [Getting Started Guide](docs/GETTING_STARTE
 
 ## Architecture
 
+```mermaid
+graph TB
+    subgraph iOS["iOS App"]
+        Views["SwiftUI Views"]
+        VM["ViewModel"]
+        DB["SwiftData"]
+        RTC["RealtimeAPI<br/>(WebRTC)"]
+        Views <--> VM
+        VM <--> DB
+        VM --> RTC
+    end
+    
+    subgraph Backend["Token Backend<br/>(Authentication Relay)"]
+        FastAPI["FastAPI Service<br/>/api/v1/token"]
+    end
+    
+    subgraph Azure["Azure OpenAI"]
+        TokenAPI["/realtime/sessions<br/>(Token Endpoint)"]
+        RealtimeAPI["Realtime API<br/>(gpt-4o-realtime)"]
+    end
+    
+    RTC -->|"① Request Token<br/>(HTTPS)"| FastAPI
+    FastAPI -->|"② Authenticate & Request<br/>(HTTPS)"| TokenAPI
+    TokenAPI -.->|"③ Return Ephemeral Token"| FastAPI
+    FastAPI -.->|"④ Return Token"| RTC
+    RTC ==>|"⑤ Direct WebRTC Connection<br/>(with token)<br/>Bidirectional Audio"| RealtimeAPI
+    
+    style iOS fill:#e3f2fd
+    style Backend fill:#fff3e0
+    style Azure fill:#e8f5e9
+    style RTC fill:#bbdefb
+    style RealtimeAPI fill:#c8e6c9
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        iOS App                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │   SwiftUI    │◄──►│  ViewModel   │◄──►│  SwiftData   │  │
-│  │    Views     │    │              │    │  (SQLite)    │  │
-│  └──────────────┘    └──────┬───────┘    └──────────────┘  │
-│                             │                               │
-│                    ┌────────▼────────┐                     │
-│                    │  RealtimeAPI    │                     │
-│                    │  (WebRTC)       │                     │
-│                    └────────┬────────┘                     │
-└─────────────────────────────┼───────────────────────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-              ▼               ▼               │
-     ┌────────────────┐  ┌────────────┐      │
-     │ Token Backend  │  │ Azure      │      │
-     │ (FastAPI)      │  │ OpenAI     │◄─────┘
-     │ /api/v1/token  │  │ Realtime   │  WebRTC audio
-     └───────┬────────┘  └────────────┘
-             │
-             ▼
-     ┌────────────────┐
-     │ Azure OpenAI   │
-     │ /client_secrets│
-     └────────────────┘
-```
+
+**Connection Flow:**
+
+1. **iOS App** requests ephemeral token from Token Backend (HTTPS)
+2. **Token Backend** authenticates with Azure OpenAI API (HTTPS)
+3. **Azure** returns ephemeral token to Token Backend
+4. **Token Backend** forwards token to iOS App
+5. **iOS App** establishes direct WebRTC connection to Azure Realtime API using token
+6. Audio streams bidirectionally between iOS and Azure (Token Backend not in audio path)
 
 **Key Components:**
 
