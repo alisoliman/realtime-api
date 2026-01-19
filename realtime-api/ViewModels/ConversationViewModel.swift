@@ -25,6 +25,7 @@ class ConversationViewModel {
     var connectionState: ConnectionState = .disconnected
     var isTalking: Bool = false
     var errorMessage: String?
+    var isDebugEnabled: Bool = true
 
     var conversationMode: ConversationMode = .liveSession {
         didSet {
@@ -49,6 +50,9 @@ class ConversationViewModel {
     }
 
     var displayMessages: [DisplayMessage] = []
+    
+    // Track the last update for scroll triggers
+    var lastMessageUpdate: Date = Date()
 
     private struct AccumulatedMessage {
         var itemId: String
@@ -86,7 +90,6 @@ class ConversationViewModel {
     func startConversation() async {
         guard connectionState == .disconnected else { return }
 
-        print("🚀 Starting conversation...")
         connectionState = .connecting
         conversationStartTime = Date()
         accumulatedMessages = []
@@ -95,37 +98,29 @@ class ConversationViewModel {
 
         let microphoneAllowed = await requestMicrophonePermissionIfNeeded()
         guard microphoneAllowed else {
-            print("❌ Microphone permission denied")
             connectionState = .error("Microphone permission denied")
             errorMessage = "Microphone access is required to start a voice conversation. Enable it in Settings → Privacy → Microphone."
             return
         }
-        print("✅ Microphone permission granted")
 
         do {
             // Fetch token from backend
-            print("🔑 Fetching token from backend...")
             let tokenResponse = try await tokenService.fetchToken()
-            print("✅ Token received, endpoint: \(tokenResponse.endpoint)")
 
             // Connect using Azure WebRTC
-            print("🌐 Connecting to Azure WebRTC...")
             realtimeAPI = try await RealtimeAPI.azureWebRTC(
                 ephemeralKey: tokenResponse.token,
                 azureEndpoint: tokenResponse.endpoint
             )
-            print("✅ Azure WebRTC connection established")
 
             connectionState = .connected
 
-            // Listen to events - STORE the task reference
-            print("🎧 Starting event listener task...")
+            // Listen to events
             eventListenerTask = Task {
                 await listenToEvents()
             }
 
         } catch {
-            print("❌ Connection failed: \(error.localizedDescription)")
             connectionState = .error(error.localizedDescription)
             errorMessage = "Failed to connect: \(error.localizedDescription)"
         }
@@ -162,36 +157,19 @@ class ConversationViewModel {
     @MainActor
     private func requestMicrophonePermissionIfNeeded() async -> Bool {
         #if os(iOS)
-        if #available(iOS 17.0, *) {
-            switch AVAudioApplication.shared.recordPermission {
-            case .granted:
-                return true
-            case .denied:
-                return false
-            case .undetermined:
-                return await withCheckedContinuation { continuation in
-                    AVAudioApplication.requestRecordPermission { granted in
-                        continuation.resume(returning: granted)
-                    }
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted:
+            return true
+        case .denied:
+            return false
+        case .undetermined:
+            return await withCheckedContinuation { continuation in
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
                 }
-            @unknown default:
-                return false
             }
-        } else {
-            switch AVAudioSession.sharedInstance().recordPermission {
-            case .granted:
-                return true
-            case .denied:
-                return false
-            case .undetermined:
-                return await withCheckedContinuation { continuation in
-                    AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                        continuation.resume(returning: granted)
-                    }
-                }
-            @unknown default:
-                return false
-            }
+        @unknown default:
+            return false
         }
         #else
         return true
@@ -199,30 +177,17 @@ class ConversationViewModel {
     }
 
     private func listenToEvents() async {
-        guard let api = realtimeAPI else {
-            print("❌ listenToEvents: realtimeAPI is nil")
-            return
-        }
-
-        print("🔄 Starting event listener...")
+        guard let api = realtimeAPI else { return }
 
         do {
-            print("📡 Waiting for events from RealtimeAPI...")
             for try await event in api.events {
-                // Check if cancelled
-                if Task.isCancelled {
-                    print("⚠️ Event listener cancelled")
-                    break
-                }
+                if Task.isCancelled { break }
 
-                print("📨 Received event: \(event)")
                 await MainActor.run {
                     handleEvent(event)
                 }
             }
-            print("⚠️ Event stream ended")
         } catch {
-            print("❌ Event stream error: \(error)")
             await MainActor.run {
                 connectionState = .error("Event stream error: \(error.localizedDescription)")
             }
@@ -231,57 +196,99 @@ class ConversationViewModel {
 
     @MainActor
     private func handleEvent(_ event: ServerEvent) {
-        // Extract transcript information from events
         switch event {
         // Session created event - configure voice
         case .sessionCreated(_, var session):
-            print("📋 Session created event received")
-            print("📋 Current voice: \(session.audio.output.voice.rawValue)")
+            debugLog("🚀 Session created - Initial voice: \(session.audio.output.voice.rawValue), Model: \(session.model.rawValue)")
+            
+            // Get selected voice from UserDefaults
+            let selectedVoiceRaw = UserDefaults.standard.string(forKey: "selectedVoice") ?? Session.Voice.alloy.rawValue
+            guard let selectedVoice = Session.Voice(rawValue: selectedVoiceRaw) else { return }
 
-            // Get selected voice from preferences
-            let selectedVoice = VoicePreferencesService.shared.selectedVoice
-
+            debugLog("⚙️ User selected voice: \(selectedVoice.rawValue)")
+            
             // Only update if different
             if session.audio.output.voice != selectedVoice {
-                print("🎤 Updating voice to: \(selectedVoice.rawValue)")
                 session.audio.output.voice = selectedVoice
+                debugLog("🔄 Updating session voice to: \(selectedVoice.rawValue)")
 
                 Task { [weak self] in
-                    do {
-                        try await self?.realtimeAPI?.send(event: .updateSession(session))
-                        print("✅ Voice update sent")
-                    } catch {
-                        print("❌ Failed to update voice: \(error)")
-                    }
+                    try? await self?.realtimeAPI?.send(event: .updateSession(session))
                 }
             } else {
-                print("✅ Voice already set to: \(selectedVoice.rawValue)")
+                debugLog("✅ Voice already matches, no update needed")
             }
 
         // Session updated confirmation
         case .sessionUpdated(_, let session):
-            print("🎯 Server confirmed session update - voice is now: \(session.audio.output.voice.rawValue)")
+            debugLog("📋 Session updated - Voice: \(session.audio.output.voice.rawValue), Model: \(session.model.rawValue)")
 
-        // User audio transcription completed
+        // VAD events - track speaking state
+        case .inputAudioBufferSpeechStarted(_, let itemId, let audioStartMs):
+            isTalking = true
+            debugLog("🎤 Speech started - itemId: \(itemId), audioStartMs: \(audioStartMs)")
+
+        case .inputAudioBufferSpeechStopped(_, let itemId, let audioEndMs):
+            isTalking = false
+            debugLog("🎤 Speech stopped - itemId: \(itemId), audioEndMs: \(audioEndMs)")
+
+        // Input audio buffer committed - user message is being created
+        case .inputAudioBufferCommitted(_, let itemId, _):
+            debugLog("📥 Audio committed - itemId: \(itemId)")
+            // The server is creating a user message from the audio buffer
+            // A conversationItemCreated event will follow
+            break
+
+        // Conversation item created - track for context awareness
+        case .conversationItemCreated(_, let item, _):
+            debugLog("💬 Conversation item created - id: \(item.id ?? "unknown"), \(itemDescription(item))")
+
+        // User audio transcription
         case .conversationItemInputAudioTranscriptionDelta(_, let itemId, _, let delta, _):
             upsertMessage(itemId: itemId, role: "user", text: delta, mode: .append)
 
         case .conversationItemInputAudioTranscriptionCompleted(_, let itemId, _, let transcript, _, _):
             upsertMessage(itemId: itemId, role: "user", text: transcript, mode: .replace)
 
-        // Assistant audio transcript completed
+        // Assistant audio transcript
         case .responseAudioTranscriptDelta(_, _, let itemId, _, _, let delta):
             upsertMessage(itemId: itemId, role: "assistant", text: delta, mode: .append)
 
         case .responseAudioTranscriptDone(_, _, let itemId, _, _, let transcript):
             upsertMessage(itemId: itemId, role: "assistant", text: transcript, mode: .replace)
 
+        // Response lifecycle events
+        case .responseCreated(_, let response):
+            debugLog("🤖 Response created - id: \(response.id)")
+
+        case .responseDone(_, let response):
+            debugLog("✅ Response done - id: \(response.id), status: \(response.status.rawValue)")
+
         // Error handling
         case .error(_, let error):
+            debugLog("❌ Error: \(error.message)")
             errorMessage = error.message
 
         default:
             break
+        }
+    }
+
+    private func debugLog(_ message: String) {
+        guard isDebugEnabled else { return }
+        print("[DEBUG] \(message)")
+    }
+
+    private func itemDescription(_ item: Item) -> String {
+        switch item {
+        case .message(let msg):
+            return "type: message, role: \(msg.role.rawValue)"
+        case .functionCall(let call):
+            return "type: function_call, name: \(call.name)"
+        case .functionCallOutput(let output):
+            return "type: function_call_output, callId: \(output.callId)"
+        @unknown default:
+            return "type: unknown"
         }
     }
 
@@ -303,7 +310,7 @@ class ConversationViewModel {
                 accumulatedMessages[index].content = text
             }
 
-            // NEW: Update displayMessages
+            // Update displayMessages
             if let displayIndex = displayMessages.firstIndex(where: { $0.id == itemId }) {
                 let newContent = switch mode {
                     case .append: displayMessages[displayIndex].content + text
@@ -315,6 +322,8 @@ class ConversationViewModel {
                     content: newContent,
                     timestamp: displayMessages[displayIndex].timestamp
                 )
+                // Signal content update for auto-scroll
+                lastMessageUpdate = Date()
             }
             return
         }
@@ -322,13 +331,14 @@ class ConversationViewModel {
         messageIndexByItemId[itemId] = accumulatedMessages.count
         accumulatedMessages.append(AccumulatedMessage(itemId: itemId, role: role, content: text))
 
-        // NEW: Add to displayMessages
+        // Add to displayMessages
         displayMessages.append(DisplayMessage(
             id: itemId,
             role: role,
             content: text,
             timestamp: Date()
         ))
+        lastMessageUpdate = Date()
     }
 
     private func saveConversation() {

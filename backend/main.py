@@ -53,21 +53,27 @@ async def generate_token():
         transcription_model = os.getenv(
             "AZURE_OPENAI_TRANSCRIPTION_MODEL", "whisper-1")
 
-        print(f"Transcription model name: {transcription_model}")
-
         # Construct the client_secrets endpoint URL
         client_secrets_url = f"{azure_endpoint}/openai/v1/realtime/client_secrets"
 
-        # Session configuration
+        # Session configuration with turn detection for proper VAD
         session_config = {
             "session": {
                 "type": "realtime",
                 "model": deployment_name,
-                "instructions": "You are a helpful assistant.",
+                "instructions": "You are a helpful assistant. Maintain a calm, even tone throughout the conversation.",
                 "audio": {
                     "input": {
                         "transcription": {
                             "model": transcription_model,
+                            "language": "en",
+                        },
+                        "turn_detection": {
+                            "type": "server_vad",
+                            "threshold": 0.5,
+                            "prefix_padding_ms": 300,
+                            "silence_duration_ms": 500,
+                            "create_response": True,
                         },
                     },
                     "output": {
@@ -96,8 +102,6 @@ async def generate_token():
 
         # Extract the ephemeral token from response
         response_data = response.json()
-        if os.getenv("DEBUG_AZURE_TOKEN_SERVICE") == "1":
-            print("Azure API response keys:", list(response_data.keys()))
 
         # Try different response formats
         ephemeral_token = (

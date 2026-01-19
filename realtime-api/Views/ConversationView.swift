@@ -24,20 +24,15 @@ struct ConversationView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(viewModel.displayMessages) { message in
-                            MessageBubble(message: ConversationMessage(
-                                id: UUID(uuidString: message.id) ?? UUID(),
-                                role: message.role,
-                                content: message.content,
-                                timestamp: message.timestamp
-                            ))
-                            .id(message.id)
+                            LiveMessageBubble(message: message)
+                                .id(message.id)
                         }
                     }
                     .padding()
-                    .onChange(of: viewModel.displayMessages.count) { _, _ in
-                        // Auto-scroll to latest message
+                    .onChange(of: viewModel.lastMessageUpdate) { _, _ in
+                        // Auto-scroll on any message update (new or content change)
                         if let lastMessage = viewModel.displayMessages.last {
-                            withAnimation {
+                            withAnimation(.easeOut(duration: 0.2)) {
                                 proxy.scrollTo(lastMessage.id, anchor: .bottom)
                             }
                         }
@@ -132,6 +127,24 @@ struct ConversationView: View {
                         .padding(.horizontal)
                     }
 
+                    // Debug Toggle
+                    Button(action: {
+                        viewModel.isDebugEnabled.toggle()
+                    }) {
+                        HStack {
+                            Image(systemName: viewModel.isDebugEnabled ? "ladybug.fill" : "ladybug")
+                                .font(.title3)
+                            Text(viewModel.isDebugEnabled ? "Debug: ON" : "Debug: OFF")
+                        }
+                        .font(.headline)
+                        .foregroundColor(viewModel.isDebugEnabled ? .white : .orange)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(viewModel.isDebugEnabled ? Color.orange : Color.orange.opacity(0.2))
+                        .cornerRadius(12)
+                    }
+                    .padding(.horizontal)
+
                     // End Conversation Button
                     Button(action: {
                         viewModel.endConversation()
@@ -156,6 +169,10 @@ struct ConversationView: View {
         }
         .navigationTitle("Conversation")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            // Ensure session is properly cleaned up when navigating away
+            viewModel.endConversation()
+        }
         .task {
             await viewModel.startConversation()
         }
@@ -211,6 +228,39 @@ struct ConversationView: View {
             return viewModel.isAudioMuted ? .gray : .green
         case .error:
             return .red
+        }
+    }
+}
+
+// MARK: - Live Message Bubble (for streaming transcription)
+
+/// Message bubble optimized for real-time streaming display
+struct LiveMessageBubble: View {
+    let message: ConversationViewModel.DisplayMessage
+
+    private var isUser: Bool {
+        message.role == "user"
+    }
+
+    var body: some View {
+        HStack {
+            if isUser { Spacer() }
+
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+                Text(message.content)
+                    .padding(12)
+                    .background(isUser ? Color.blue : Color.gray.opacity(0.2))
+                    .foregroundColor(isUser ? .white : .primary)
+                    .cornerRadius(16)
+                    .animation(.none, value: message.content) // Prevent text animation jitter
+
+                Text(message.timestamp, style: .time)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)
+
+            if !isUser { Spacer() }
         }
     }
 }

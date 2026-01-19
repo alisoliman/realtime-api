@@ -2,8 +2,6 @@
 //  realtime_apiApp.swift
 //  realtime-api
 //
-//  Created by Ali S on 17/12/2025.
-//
 
 import SwiftUI
 import SwiftData

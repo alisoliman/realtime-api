@@ -5,10 +5,15 @@
 
 import SwiftUI
 import SwiftData
-import UIKit
 
 struct ConversationDetailView: View {
     let conversation: Conversation
+
+    private var transcript: String {
+        conversation.messages
+            .map { "\($0.role.capitalized): \($0.content)" }
+            .joined(separator: "\n\n")
+    }
 
     var body: some View {
         ScrollView {
@@ -23,25 +28,11 @@ struct ConversationDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Menu {
-                    Button(action: shareTranscript) {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
+                ShareLink(item: transcript, subject: Text(conversation.title)) {
+                    Image(systemName: "square.and.arrow.up")
                 }
             }
         }
-    }
-
-    private func shareTranscript() {
-        // TODO: Implement share functionality
-        let transcript = conversation.messages
-            .map { "\($0.role.capitalized): \($0.content)" }
-            .joined(separator: "\n\n")
-
-        // For now, just copy to clipboard
-        UIPasteboard.general.string = transcript
     }
 }
 
