@@ -20,6 +20,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class TokenRequest(BaseModel):
+    voice: str = "alloy"
+
+
 # Response models
 
 
@@ -43,7 +47,7 @@ async def health_check():
 
 
 @app.post("/api/v1/token", response_model=TokenResponse)
-async def generate_token():
+async def generate_token(request: TokenRequest = TokenRequest()):
     """Generate ephemeral token for Azure OpenAI Realtime API"""
     try:
         deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT")
@@ -77,7 +81,7 @@ async def generate_token():
                         },
                     },
                     "output": {
-                        "voice": "alloy",
+                        "voice": request.voice,
                     },
                 },
             },

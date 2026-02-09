@@ -8,10 +8,10 @@ import RealtimeAPI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("selectedVoice") private var selectedVoiceRaw: String = Session.Voice.shimmer.rawValue
+    @AppStorage("selectedVoice") private var selectedVoiceRaw: String = Session.Voice.alloy.rawValue
 
     private var selectedVoice: Session.Voice {
-        Session.Voice(rawValue: selectedVoiceRaw) ?? .shimmer
+        Session.Voice(rawValue: selectedVoiceRaw) ?? .alloy
     }
 
     var body: some View {

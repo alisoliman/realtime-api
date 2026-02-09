@@ -9,8 +9,12 @@ import SwiftData
 struct ConversationDetailView: View {
     let conversation: Conversation
 
+    private var sortedMessages: [ConversationMessage] {
+        conversation.messages.sorted { $0.timestamp < $1.timestamp }
+    }
+
     private var transcript: String {
-        conversation.messages
+        sortedMessages
             .map { "\($0.role.capitalized): \($0.content)" }
             .joined(separator: "\n\n")
     }
@@ -18,7 +22,7 @@ struct ConversationDetailView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
-                ForEach(conversation.messages) { message in
+                ForEach(sortedMessages) { message in
                     MessageBubble(message: message)
                 }
             }
@@ -66,6 +70,8 @@ struct MessageBubble: View {
                 Spacer()
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(isUser ? "You" : "Assistant"): \(message.content)")
     }
 }
 

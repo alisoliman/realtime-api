@@ -5,6 +5,10 @@
 
 import Foundation
 
+struct TokenRequest: Codable {
+    let voice: String
+}
+
 struct TokenResponse: Codable {
     let token: String
     let endpoint: String
@@ -53,7 +57,7 @@ class TokenService {
 #endif
     }
 
-    func fetchToken() async throws -> TokenResponse {
+    func fetchToken(voice: String = "alloy") async throws -> TokenResponse {
         let urlString = "\(backendURL)/api/v1/token"
         guard let url = URL(string: urlString) else {
             throw TokenServiceError.invalidURL(urlString)
@@ -62,6 +66,7 @@ class TokenService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(TokenRequest(voice: voice))
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)

@@ -58,6 +58,7 @@ class ConversationViewModel {
         var itemId: String
         var role: String
         var content: String
+        var timestamp: Date
     }
 
     struct DisplayMessage: Identifiable {
@@ -104,8 +105,11 @@ class ConversationViewModel {
         }
 
         do {
-            // Fetch token from backend
-            let tokenResponse = try await tokenService.fetchToken()
+            // Get user's selected voice from UserDefaults
+            let selectedVoice = UserDefaults.standard.string(forKey: "selectedVoice") ?? Session.Voice.alloy.rawValue
+
+            // Fetch token from backend with the selected voice
+            let tokenResponse = try await tokenService.fetchToken(voice: selectedVoice)
 
             // Connect using Azure WebRTC
             realtimeAPI = try await RealtimeAPI.azureWebRTC(
@@ -197,27 +201,9 @@ class ConversationViewModel {
     @MainActor
     private func handleEvent(_ event: ServerEvent) {
         switch event {
-        // Session created event - configure voice
-        case .sessionCreated(_, var session):
-            debugLog("🚀 Session created - Initial voice: \(session.audio.output.voice.rawValue), Model: \(session.model.rawValue)")
-            
-            // Get selected voice from UserDefaults
-            let selectedVoiceRaw = UserDefaults.standard.string(forKey: "selectedVoice") ?? Session.Voice.alloy.rawValue
-            guard let selectedVoice = Session.Voice(rawValue: selectedVoiceRaw) else { return }
-
-            debugLog("⚙️ User selected voice: \(selectedVoice.rawValue)")
-            
-            // Only update if different
-            if session.audio.output.voice != selectedVoice {
-                session.audio.output.voice = selectedVoice
-                debugLog("🔄 Updating session voice to: \(selectedVoice.rawValue)")
-
-                Task { [weak self] in
-                    try? await self?.realtimeAPI?.send(event: .updateSession(session))
-                }
-            } else {
-                debugLog("✅ Voice already matches, no update needed")
-            }
+        // Session created event
+        case .sessionCreated(_, let session):
+            debugLog("🚀 Session created - Voice: \(session.audio.output.voice.rawValue), Model: \(session.model.rawValue)")
 
         // Session updated confirmation
         case .sessionUpdated(_, let session):
@@ -329,14 +315,15 @@ class ConversationViewModel {
         }
 
         messageIndexByItemId[itemId] = accumulatedMessages.count
-        accumulatedMessages.append(AccumulatedMessage(itemId: itemId, role: role, content: text))
+        let now = Date()
+        accumulatedMessages.append(AccumulatedMessage(itemId: itemId, role: role, content: text, timestamp: now))
 
         // Add to displayMessages
         displayMessages.append(DisplayMessage(
             id: itemId,
             role: role,
             content: text,
-            timestamp: Date()
+            timestamp: now
         ))
         lastMessageUpdate = Date()
     }
@@ -355,7 +342,8 @@ class ConversationViewModel {
         for message in nonEmptyMessages {
             let conversationMessage = ConversationMessage(
                 role: message.role,
-                content: message.content
+                content: message.content,
+                timestamp: message.timestamp
             )
             conversation.messages.append(conversationMessage)
         }

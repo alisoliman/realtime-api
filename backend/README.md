@@ -75,6 +75,13 @@ Response:
 POST /api/v1/token
 ```
 
+Request body (optional):
+```json
+{
+  "voice": "alloy"
+}
+```
+
 Response:
 ```json
 {
@@ -96,8 +103,10 @@ Response:
 iOS App                    Token Service              Azure OpenAI
    │                            │                          │
    │  POST /api/v1/token        │                          │
+   │  { "voice": "alloy" }      │                          │
    │──────────────────────────► │                          │
-   │                            │  POST /client_secrets    │
+   │                            │  POST /openai/v1/        │
+   │                            │  realtime/client_secrets │
    │                            │────────────────────────► │
    │                            │                          │
    │                            │  { client_secret }       │

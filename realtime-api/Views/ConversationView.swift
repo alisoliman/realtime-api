@@ -49,6 +49,7 @@ struct ConversationView: View {
                     .font(.system(size: 60))
                     .foregroundColor(connectionColor)
                     .symbolEffect(.bounce, value: !viewModel.isAudioMuted)
+                    .accessibilityLabel(viewModel.isAudioMuted ? "Microphone muted" : "Microphone active")
 
                 VStack(spacing: 8) {
                     Text(statusText)
@@ -63,6 +64,7 @@ struct ConversationView: View {
                 }
             }
             .padding(.vertical, 20)
+            .accessibilityElement(children: .combine)
 
             // Bottom Section: Controls
             if case .connected = viewModel.connectionState {
@@ -118,6 +120,7 @@ struct ConversationView: View {
                             Circle()
                                 .fill(Color.green)
                                 .frame(width: 8, height: 8)
+                                .accessibilityHidden(true)
                         }
                         .font(.headline)
                         .foregroundColor(.green)
@@ -125,11 +128,14 @@ struct ConversationView: View {
                         .background(Color.green.opacity(0.1))
                         .cornerRadius(12)
                         .padding(.horizontal)
+                        .accessibilityLabel("Microphone is active, continuous listening mode")
                     }
 
                     // Debug Toggle
                     Button(action: {
-                        viewModel.isDebugEnabled.toggle()
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            viewModel.isDebugEnabled.toggle()
+                        }
                     }) {
                         HStack {
                             Image(systemName: viewModel.isDebugEnabled ? "ladybug.fill" : "ladybug")
@@ -147,6 +153,9 @@ struct ConversationView: View {
 
                     // End Conversation Button
                     Button(action: {
+                        #if os(iOS)
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        #endif
                         viewModel.endConversation()
                         dismiss()
                     }) {
@@ -165,6 +174,7 @@ struct ConversationView: View {
                     .padding(.horizontal)
                 }
                 .padding(.bottom, 20)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .navigationTitle("Conversation")
@@ -262,6 +272,8 @@ struct LiveMessageBubble: View {
 
             if !isUser { Spacer() }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(message.role == "user" ? "You" : "Assistant"): \(message.content)")
     }
 }
 

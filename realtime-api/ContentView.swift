@@ -9,6 +9,7 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Conversation.timestamp, order: .reverse) private var conversations: [Conversation]
+    @State private var showingSettings = false
 
     var body: some View {
         NavigationStack {
@@ -48,7 +49,9 @@ struct ContentView: View {
             .navigationTitle("Conversations")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    NavigationLink(destination: SettingsView()) {
+                    Button {
+                        showingSettings = true
+                    } label: {
                         Label("Settings", systemImage: "gear")
                     }
                 }
@@ -69,6 +72,9 @@ struct ContentView: View {
                         description: Text("Start a new conversation to begin")
                     )
                 }
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
             }
         }
     }
