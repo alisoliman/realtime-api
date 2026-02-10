@@ -55,14 +55,15 @@ struct MessageBubble: View {
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
                 Text(message.content)
-                    .padding(12)
-                    .background(isUser ? Color.blue : Color.gray.opacity(0.2))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(isUser ? Color(red: 0.42, green: 0.56, blue: 0.69) : Color(red: 0.95, green: 0.94, blue: 0.96))
                     .foregroundColor(isUser ? .white : .primary)
-                    .cornerRadius(16)
+                    .cornerRadius(18)
 
                 Text(message.timestamp, style: .time)
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.secondary.opacity(0.5))
             }
             .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)
 
