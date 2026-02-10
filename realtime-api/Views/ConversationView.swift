@@ -289,29 +289,50 @@ struct LiveMessageBubble: View {
         message.role == "user"
     }
 
+    private var isTool: Bool {
+        message.role == "tool"
+    }
+
     var body: some View {
-        HStack {
-            if isUser { Spacer() }
-
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+        if isTool {
+            // Tool call: centered, subtle, compact
+            HStack {
+                Spacer()
                 Text(message.content)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(isUser ? ZeroColors.userBubble : ZeroColors.assistantBubble)
-                    .foregroundColor(isUser ? .white : .primary)
-                    .cornerRadius(18)
+                    .font(.caption)
+                    .foregroundColor(ZeroColors.gentlePurple)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(ZeroColors.gentlePurple.opacity(0.08))
+                    .cornerRadius(12)
                     .animation(.none, value: message.content)
-
-                Text(message.timestamp, style: .time)
-                    .font(.caption2)
-                    .foregroundColor(.secondary.opacity(0.5))
+                Spacer()
             }
-            .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)
+            .accessibilityLabel("Tool call: \(message.content)")
+        } else {
+            HStack {
+                if isUser { Spacer() }
 
-            if !isUser { Spacer() }
+                VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+                    Text(message.content)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(isUser ? ZeroColors.userBubble : ZeroColors.assistantBubble)
+                        .foregroundColor(isUser ? .white : .primary)
+                        .cornerRadius(18)
+                        .animation(.none, value: message.content)
+
+                    Text(message.timestamp, style: .time)
+                        .font(.caption2)
+                        .foregroundColor(.secondary.opacity(0.5))
+                }
+                .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)
+
+                if !isUser { Spacer() }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(isUser ? "You" : "Assistant"): \(message.content)")
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(isUser ? "You" : "Assistant"): \(message.content)")
     }
 }
 

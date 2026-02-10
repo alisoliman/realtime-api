@@ -16,6 +16,7 @@ A sample iOS app demonstrating real-time voice conversations with Azure OpenAI's
 
 - 🎤 **Real-time voice conversations** with GPT-4o
 - 📝 **Live transcription** of both user and assistant speech
+- 🔧 **Tool calling** — model can call functions (time, weather, device info) during conversation
 - 💾 **Conversation history** persisted with SwiftData
 - 🔊 **Multiple voice options** (Alloy, Echo, Shimmer, etc.)
 - 📤 **Share transcripts** via iOS share sheet
@@ -115,13 +116,53 @@ realtime-api/
 │   ├── Models/                # SwiftData entities
 │   ├── ViewModels/            # Business logic
 │   ├── Views/                 # SwiftUI views
-│   └── Services/              # API clients
+│   ├── Services/              # API clients
+│   └── Tools/                 # Function calling tools
+│       ├── ToolRegistry.swift # Tool protocol & registry
+│       ├── GetCurrentTimeTool.swift
+│       ├── GetWeatherTool.swift
+│       └── GetDeviceInfoTool.swift
 ├── backend/                   # Python token service
 │   ├── main.py               # FastAPI app
 │   └── .env.example          # Environment template
 └── docs/                      # Documentation
     └── GETTING_STARTED.md    # Setup guide
 ```
+
+## Tool Calling
+
+The app supports real-time function calling — the AI model can invoke tools during voice conversations. Tools are registered via `session.update` after the WebRTC session is established.
+
+### Built-in Tools
+
+| Tool | Description |
+|------|-------------|
+| `get_current_time` | Returns current date/time in user's timezone |
+| `get_weather` | Returns weather for a location (simulated data) |
+| `get_device_info` | Returns device model, OS version, battery level |
+
+### Adding Custom Tools
+
+1. Create a struct conforming to `CallableTool`:
+
+```swift
+struct MyTool: CallableTool {
+    let name = "my_tool"
+    let description = "Does something useful"
+    let parameters: JSONSchema = .object(properties: [
+        "input": .string(description: "The input value")
+    ])
+
+    func execute(arguments: String) async -> String {
+        // Parse arguments JSON, do work, return result JSON
+        return "{\"result\": \"done\"}"
+    }
+}
+```
+
+2. Add it to `ToolRegistry.swift`'s default tools array.
+
+Tool calls appear as subtle status messages in the conversation UI and are not persisted to conversation history.
 
 ## Configuration
 

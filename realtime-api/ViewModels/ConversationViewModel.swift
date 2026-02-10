@@ -62,18 +62,23 @@ class ConversationViewModel {
     }
 
     struct DisplayMessage: Identifiable {
-        let id: String  // Use itemId from AccumulatedMessage
-        let role: String
+        let id: String
+        let role: String  // "user", "assistant", or "tool"
         let content: String
         let timestamp: Date
 
         var isUser: Bool {
             role == "user"
         }
+
+        var isTool: Bool {
+            role == "tool"
+        }
     }
 
     private var realtimeAPI: RealtimeAPI?
     private let tokenService: TokenService
+    private let toolRegistry: ToolRegistry
     private let modelContext: ModelContext
     private var eventListenerTask: Task<Void, Never>?
 
@@ -82,9 +87,15 @@ class ConversationViewModel {
     private var accumulatedMessages: [AccumulatedMessage] = []
     private var messageIndexByItemId: [String: Int] = [:]
 
-    init(tokenService: TokenService = TokenService(), modelContext: ModelContext) {
+    // Tool call argument accumulation
+    private var pendingToolArguments: [String: String] = [:]  // callId -> accumulated JSON args
+    private var pendingToolNames: [String: String] = [:]      // callId -> function name
+    private var pendingToolItemIds: [String: String] = [:]    // callId -> itemId
+
+    init(tokenService: TokenService = TokenService(), modelContext: ModelContext, toolRegistry: ToolRegistry = ToolRegistry()) {
         self.tokenService = tokenService
         self.modelContext = modelContext
+        self.toolRegistry = toolRegistry
     }
 
     @MainActor
@@ -201,13 +212,14 @@ class ConversationViewModel {
     @MainActor
     private func handleEvent(_ event: ServerEvent) {
         switch event {
-        // Session created event
+        // Session created — register tools
         case .sessionCreated(_, let session):
             debugLog("🚀 Session created - Voice: \(session.audio.output.voice.rawValue), Model: \(session.model.rawValue)")
+            registerTools(session: session)
 
         // Session updated confirmation
         case .sessionUpdated(_, let session):
-            debugLog("📋 Session updated - Voice: \(session.audio.output.voice.rawValue), Model: \(session.model.rawValue)")
+            debugLog("📋 Session updated - Voice: \(session.audio.output.voice.rawValue), Tools: \(session.tools?.count ?? 0)")
 
         // VAD events - track speaking state
         case .inputAudioBufferSpeechStarted(_, let itemId, let audioStartMs):
@@ -221,13 +233,15 @@ class ConversationViewModel {
         // Input audio buffer committed - user message is being created
         case .inputAudioBufferCommitted(_, let itemId, _):
             debugLog("📥 Audio committed - itemId: \(itemId)")
-            // The server is creating a user message from the audio buffer
-            // A conversationItemCreated event will follow
             break
 
         // Conversation item created - track for context awareness
         case .conversationItemCreated(_, let item, _):
-            debugLog("💬 Conversation item created - id: \(item.id ?? "unknown"), \(itemDescription(item))")
+            debugLog("💬 Conversation item created - id: \(item.id), \(itemDescription(item))")
+            // Track function call names for tool execution
+            if case .functionCall(let call) = item {
+                pendingToolNames[call.callId] = call.name
+            }
 
         // User audio transcription
         case .conversationItemInputAudioTranscriptionDelta(_, let itemId, _, let delta, _):
@@ -242,6 +256,19 @@ class ConversationViewModel {
 
         case .responseAudioTranscriptDone(_, _, let itemId, _, _, let transcript):
             upsertMessage(itemId: itemId, role: "assistant", text: transcript, mode: .replace)
+
+        // Function call arguments streaming
+        case .responseFunctionCallArgumentsDelta(_, _, let itemId, _, let callId, let delta):
+            pendingToolArguments[callId, default: ""] += delta
+            pendingToolItemIds[callId] = itemId
+            debugLog("🔧 Tool args delta - callId: \(callId), delta: \(delta)")
+
+        // Function call complete — execute the tool
+        case .responseFunctionCallArgumentsDone(_, _, let itemId, _, let callId, let arguments):
+            pendingToolArguments[callId] = arguments
+            pendingToolItemIds[callId] = itemId
+            debugLog("🔧 Tool call complete - callId: \(callId), args: \(arguments)")
+            executeToolCall(callId: callId, itemId: itemId)
 
         // Response lifecycle events
         case .responseCreated(_, let response):
@@ -258,6 +285,94 @@ class ConversationViewModel {
         default:
             break
         }
+    }
+
+    // MARK: - Tool Calling
+
+    /// Register tools with the session after creation.
+    private func registerTools(session: Session) {
+        let tools = toolRegistry.sessionTools
+        guard !tools.isEmpty else { return }
+
+        var updatedSession = session
+        updatedSession.tools = tools
+        updatedSession.toolChoice = .auto
+
+        Task { [weak self] in
+            guard let api = self?.realtimeAPI else { return }
+            do {
+                try await api.send(event: .updateSession(eventId: nil, session: updatedSession))
+                await MainActor.run {
+                    self?.debugLog("🔧 Registered \(tools.count) tools with session")
+                }
+            } catch {
+                await MainActor.run {
+                    self?.debugLog("❌ Failed to register tools: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    /// Execute a tool call and send the result back to the model.
+    private func executeToolCall(callId: String, itemId: String) {
+        let arguments = pendingToolArguments[callId] ?? "{}"
+
+        // Determine tool name from the conversationItemCreated event or pending state
+        // The function name comes from the item — we need to find it
+        Task { [weak self] in
+            guard let self, let api = self.realtimeAPI else { return }
+
+            // Find the tool name from the item
+            let toolName = self.findToolName(for: callId)
+
+            await MainActor.run {
+                // Show tool call in chat
+                let displayName = toolName ?? "tool"
+                self.upsertMessage(itemId: "tool-\(callId)", role: "tool", text: "⚡ Calling \(displayName)…", mode: .replace)
+            }
+
+            // Execute the tool
+            let result: String
+            if let name = toolName {
+                result = await self.toolRegistry.execute(name: name, arguments: arguments)
+            } else {
+                result = "{\"error\": \"Could not determine tool name\"}"
+            }
+
+            await MainActor.run {
+                self.upsertMessage(itemId: "tool-\(callId)", role: "tool", text: "⚡ \(toolName ?? "tool") → done", mode: .replace)
+                self.debugLog("🔧 Tool result: \(result.prefix(200))")
+            }
+
+            // Send function call output back to the model
+            do {
+                let output = Item.FunctionCallOutput(
+                    id: UUID().uuidString,
+                    callId: callId,
+                    output: result
+                )
+                try await api.send(event: .createConversationItem(eventId: nil, previousItemId: nil, item: .functionCallOutput(output)))
+
+                // Trigger the model to continue responding with the tool result
+                try await api.send(event: .createResponse(eventId: nil, response: nil))
+            } catch {
+                await MainActor.run {
+                    self.debugLog("❌ Failed to send tool result: \(error.localizedDescription)")
+                }
+            }
+
+            // Clean up pending state
+            await MainActor.run {
+                self.pendingToolArguments.removeValue(forKey: callId)
+                self.pendingToolNames.removeValue(forKey: callId)
+                self.pendingToolItemIds.removeValue(forKey: callId)
+            }
+        }
+    }
+
+    /// Find the tool name for a given call ID.
+    private func findToolName(for callId: String) -> String? {
+        return pendingToolNames[callId]
     }
 
     private func debugLog(_ message: String) {
@@ -329,7 +444,9 @@ class ConversationViewModel {
     }
 
     private func saveConversation() {
-        let nonEmptyMessages = accumulatedMessages.filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let nonEmptyMessages = accumulatedMessages.filter {
+            !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.role != "tool"
+        }
         guard !nonEmptyMessages.isEmpty,
               let startTime = conversationStartTime else { return }
 
